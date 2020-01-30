@@ -1,87 +1,93 @@
+import random
+import time
 
+import requests
 import stem
 from stem.control import Controller
 from stem.process import launch_tor_with_config
 
-import requests
-
-import time
 
 class TorRequest(object):
-  def __init__(self, 
-      proxy_port=9050, 
-      ctrl_port=9051,
-      password=None):
+    def __init__(self,
+                 proxy_port=9050,
+                 ctrl_port=9051,
+                 password=None):
 
-    self.proxy_port = proxy_port
-    self.ctrl_port = ctrl_port
-    
-    self._tor_proc = None
-    if not self._tor_process_exists():
-      self._tor_proc = self._launch_tor()
+        self.proxy_port = proxy_port
+        self.ctrl_port = ctrl_port
 
-    self.ctrl = Controller.from_port(port=self.ctrl_port)
-    self.ctrl.authenticate(password=password)
+        self._tor_proc = None
+        if not self._tor_process_exists():
+            self._tor_proc = self._launch_tor()
 
-    self.session = requests.Session()
-    self.session.proxies.update({
-      'http': 'socks5://localhost:%d' % self.proxy_port,
-      'https': 'socks5://localhost:%d' % self.proxy_port,
-    })
+        self.ctrl = Controller.from_port(port=self.ctrl_port)
+        self.ctrl.authenticate(password=password)
 
-  def _tor_process_exists(self):
-    try:
-      ctrl = Controller.from_port(port=self.ctrl_port)
-      ctrl.close()
-      return True
-    except:
-      return False
+        user = random.randint(1e9, 9e9)
+        password = random.randint(1e9, 9e9)
 
-  def _launch_tor(self):
-    return launch_tor_with_config(
-      config={
-        'SocksPort': str(self.proxy_port),
-        'ControlPort': str(self.ctrl_port)
-      },
-      take_ownership=True)
+        self.session = requests.Session()
+        self.session.proxies.update({
+            'http': 'socks5://{}:{}@localhost:{}'.format(
+                user, password, self.proxy_port),
+            'https': 'socks5://{}:{}@localhost:{}'.format(
+                user, password, self.proxy_port),
+        })
 
-  def close(self):
-    try: 
-      self.session.close()
-    except: pass
+    def _tor_process_exists(self):
+        try:
+            ctrl = Controller.from_port(port=self.ctrl_port)
+            ctrl.close()
+            return True
+        except:
+            return False
 
-    try: 
-      self.ctrl.close()
-    except: pass
+    def _launch_tor(self):
+        return launch_tor_with_config(
+            config={
+                'SocksPort': str(self.proxy_port),
+                'ControlPort': str(self.ctrl_port)
+            },
+            take_ownership=True)
 
-    if self._tor_proc:
-      self._tor_proc.terminate()
+    def close(self):
+        try:
+            self.session.close()
+        except:
+            pass
 
-  def reset_identity_async(self):
-    self.ctrl.signal(stem.Signal.NEWNYM)
+        try:
+            self.ctrl.close()
+        except:
+            pass
 
-  def reset_identity(self):
-    self.reset_identity_async()
-    time.sleep(self.ctrl.get_newnym_wait())
+        if self._tor_proc:
+            self._tor_proc.terminate()
 
-  def get(self, *args, **kwargs):
-    return self.session.get(*args, **kwargs)
+    def reset_identity_async(self):
+        self.ctrl.signal(stem.Signal.NEWNYM)
 
-  def post(self, *args, **kwargs):
-    return self.session.post(*args, **kwargs)
+    def reset_identity(self):
+        self.reset_identity_async()
+        time.sleep(self.ctrl.get_newnym_wait())
 
-  def put(self, *args, **kwargs):
-    return self.session.put(*args, **kwargs)
+    def get(self, *args, **kwargs):
+        return self.session.get(*args, **kwargs)
 
-  def patch(self, *args, **kwargs):
-    return self.session.patch(*args, **kwargs)
-    
-  def delete(self, *args, **kwargs):
-    return self.session.delete(*args, **kwargs)
+    def post(self, *args, **kwargs):
+        return self.session.post(*args, **kwargs)
 
-  def __enter__(self):
-    return self
+    def put(self, *args, **kwargs):
+        return self.session.put(*args, **kwargs)
 
-  def __exit__(self, *args):
-    self.close()
+    def patch(self, *args, **kwargs):
+        return self.session.patch(*args, **kwargs)
 
+    def delete(self, *args, **kwargs):
+        return self.session.delete(*args, **kwargs)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
